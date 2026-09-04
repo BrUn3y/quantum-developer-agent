@@ -60,13 +60,20 @@ python -m quantum_developer_agent.agent
 curl http://localhost:8001/.well-known/agent-card.json
 
 # Test with a simple request
-curl -X POST http://localhost:8001 \
+curl -X POST http://localhost:8001/jsonrpc/ \
   -H "Content-Type: application/json" \
   -d '{
-    "messages": [{
-      "role": "user",
-      "content": "Create a Bell state circuit in QASM"
-    }]
+    "jsonrpc": "2.0",
+    "id": "1",
+    "method": "message/send",
+    "params": {
+      "message": {
+        "kind": "message",
+        "messageId": "51188d1f-1c19-46ed-aad7-e45735bcb0ab",
+        "role": "user",
+        "parts": [{"kind": "text", "text": "Create a Bell state circuit in QASM"}]
+      }
+    }
   }'
 ```
 
@@ -87,37 +94,58 @@ docker run -d -p 8001:8001 --env-file .env --name quantum-dev quantum-developer-
 
 ### Generate Quantum Code
 ```bash
-curl -X POST http://localhost:8001 \
+curl -X POST http://localhost:8001/jsonrpc/ \
   -H "Content-Type: application/json" \
   -d '{
-    "messages": [{
-      "role": "user",
-      "content": "Create a superposition circuit with 3 qubits"
-    }]
+    "jsonrpc": "2.0",
+    "id": "1",
+    "method": "message/send",
+    "params": {
+      "message": {
+        "kind": "message",
+        "messageId": "d2741136-e3d7-4f5d-add1-64a46b44db87",
+        "role": "user",
+        "parts": [{"kind": "text", "text": "Create a superposition circuit with 3 qubits"}]
+      }
+    }
   }'
 ```
 
 ### Implement Grover's Algorithm
 ```bash
-curl -X POST http://localhost:8001 \
+curl -X POST http://localhost:8001/jsonrpc/ \
   -H "Content-Type: application/json" \
   -d '{
-    "messages": [{
-      "role": "user",
-      "content": "Implement Grover'\''s algorithm for 3 qubits"
-    }]
+    "jsonrpc": "2.0",
+    "id": "1",
+    "method": "message/send",
+    "params": {
+      "message": {
+        "kind": "message",
+        "messageId": "5557b6a4-276a-4e26-b7b8-1fcdcf9db7e3",
+        "role": "user",
+        "parts": [{"kind": "text", "text": "Implement Grover'\''s algorithm for 3 qubits"}]
+      }
+    }
   }'
 ```
 
 ### Explain Quantum Concepts
 ```bash
-curl -X POST http://localhost:8001 \
+curl -X POST http://localhost:8001/jsonrpc/ \
   -H "Content-Type: application/json" \
   -d '{
-    "messages": [{
-      "role": "user",
-      "content": "Explain quantum entanglement with an example"
-    }]
+    "jsonrpc": "2.0",
+    "id": "1",
+    "method": "message/send",
+    "params": {
+      "message": {
+        "kind": "message",
+        "messageId": "84780764-e7fb-42a1-91d5-2696a1acbef9",
+        "role": "user",
+        "parts": [{"kind": "text", "text": "Explain quantum entanglement with an example"}]
+      }
+    }
   }'
 ```
 

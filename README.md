@@ -80,7 +80,7 @@ This agent is the **quantum code generation specialist** of the multi-agent syst
 - ❌ Does not retrieve job results (use Status Agent)
 
 **Communication:**
-- Receives requests via A2A from Operations Agent (port 8000)
+- Receives requests via A2A from Quantum Lab Agent (port 8000)
 - Responds with QASM/Qiskit code and explanations
 - Can be invoked directly on port 8001
 
@@ -145,13 +145,20 @@ curl http://localhost:8001/.well-known/agent-card.json
 ### Example 1: Generate a Bell State Circuit
 
 ```bash
-curl -X POST http://localhost:8001 \
+curl -X POST http://localhost:8001/jsonrpc/ \
   -H "Content-Type: application/json" \
   -d '{
-    "messages": [{
-      "role": "user",
-      "content": "Create a Bell state circuit in QASM"
-    }]
+    "jsonrpc": "2.0",
+    "id": "1",
+    "method": "message/send",
+    "params": {
+      "message": {
+        "kind": "message",
+        "messageId": "4737a402-f622-4db5-a1f4-96b75743a5f9",
+        "role": "user",
+        "parts": [{"kind": "text", "text": "Create a Bell state circuit in QASM"}]
+      }
+    }
   }'
 ```
 
@@ -164,13 +171,20 @@ curl -X POST http://localhost:8001 \
 ### Example 2: Implement Grover's Algorithm
 
 ```bash
-curl -X POST http://localhost:8001 \
+curl -X POST http://localhost:8001/jsonrpc/ \
   -H "Content-Type: application/json" \
   -d '{
-    "messages": [{
-      "role": "user",
-      "content": "Implement Grover'\''s algorithm for 3 qubits"
-    }]
+    "jsonrpc": "2.0",
+    "id": "1",
+    "method": "message/send",
+    "params": {
+      "message": {
+        "kind": "message",
+        "messageId": "740be220-1be6-4f10-9efb-bd61d8276010",
+        "role": "user",
+        "parts": [{"kind": "text", "text": "Implement Grover'\''s algorithm for 3 qubits"}]
+      }
+    }
   }'
 ```
 
@@ -183,13 +197,20 @@ curl -X POST http://localhost:8001 \
 ### Example 3: Explain Quantum Concepts
 
 ```bash
-curl -X POST http://localhost:8001 \
+curl -X POST http://localhost:8001/jsonrpc/ \
   -H "Content-Type: application/json" \
   -d '{
-    "messages": [{
-      "role": "user",
-      "content": "Explain what quantum entanglement is"
-    }]
+    "jsonrpc": "2.0",
+    "id": "1",
+    "method": "message/send",
+    "params": {
+      "message": {
+        "kind": "message",
+        "messageId": "ff329340-c608-4189-aeb1-e817f2c6dfe8",
+        "role": "user",
+        "parts": [{"kind": "text", "text": "Explain what quantum entanglement is"}]
+      }
+    }
   }'
 ```
 
@@ -297,19 +318,29 @@ This agent is designed to work as part of the Quantum Lab Agent System:
 While designed for A2A communication, the agent can also be used standalone:
 
 ```python
+import uuid
 import requests
 
 response = requests.post(
-    "http://localhost:8001",
+    "http://localhost:8001/jsonrpc/",
     json={
-        "messages": [{
-            "role": "user",
-            "content": "Create a superposition circuit"
-        }]
+        "jsonrpc": "2.0",
+        "id": "1",
+        "method": "message/send",
+        "params": {
+            "message": {
+                "kind": "message",
+                "messageId": str(uuid.uuid4()),
+                "role": "user",
+                "parts": [{"kind": "text", "text": "Create a superposition circuit"}]
+            }
+        }
     }
 )
 
-print(response.json())
+result = response.json()["result"]
+final_message = result["history"][-1]
+print(final_message["parts"][0]["text"])
 ```
 
 ## 🐛 Troubleshooting
@@ -357,7 +388,7 @@ This agent is part of the Quantum Computing Multi-Agent System. Here are the rel
 - **[Quantum Computing Agent](https://github.ibm.com/Edgar-Castaneda/quantum-computing-agent)** - Circuit execution specialist
 - **[Quantum Status Agent](https://github.ibm.com/Edgar-Castaneda/quantum-status-agent)** - Status monitoring and job tracking
 - **[Quantum Developer Agent](https://github.ibm.com/Edgar-Castaneda/quantum-developer-agent)** - Code generation and algorithm implementation (this repository)
-- **[Quantum Operations Agent](https://github.ibm.com/Edgar-Castaneda/quantum-lab-agent)** - Main orchestrator coordinating all agents
+- **[Quantum Lab Agent](https://github.ibm.com/Edgar-Castaneda/quantum-lab-agent)** - Main orchestrator coordinating all agents
 
 ## 📚 Additional Resources
 
