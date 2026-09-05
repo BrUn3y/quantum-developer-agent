@@ -9,14 +9,16 @@ This agent is a specialist in:
 - Quantum code optimization
 - Documentation of quantum algorithms
 
-Model: mistralai/mistral-large-2 (Watsonx)
+Model: configurable via DEVELOPER_MODEL (Granite/Ollama or Watsonx)
 Port: 8001
 Type: AgentStack Server with A2A (ReActAgent without tools)
 """
 
+import asyncio
+import json
 import os
-from dotenv import load_dotenv
-load_dotenv()
+import re
+from urllib import request as urllib_request
 
 from typing import Annotated
 from collections.abc import AsyncGenerator
@@ -31,8 +33,10 @@ from agentstack_sdk.a2a.extensions import AgentDetail, AgentDetailTool
 from agentstack_sdk.a2a.extensions import TrajectoryExtensionServer, TrajectoryExtensionSpec
 
 from beeai_framework.agents.react import ReActAgent
-from beeai_framework.backend import ChatModel
+from beeai_framework.backend.message import UserMessage
 from beeai_framework.memory import UnconstrainedMemory
+
+from .model_config import create_chat_model, explain_error, model_name, run_agent_with_retries
 
 # Specialized instructions for the Developer Agent
 DEVELOPER_INSTRUCTIONS = """You are an Expert in Quantum Code Development and Quantum Algorithms with deep knowledge in Qiskit and OpenQASM.
@@ -315,7 +319,7 @@ REMEMBER:
 DEVELOPER_AGENT_DETAIL = AgentDetail(
     user_greeting="👨‍💻 Hello! I'm the Quantum Developer Agent. I'm an expert in generating quantum code (Qiskit/QASM), explaining quantum computing concepts, and creating classical quantum algorithms like Grover, Shor, Deutsch-Jozsa, and more.",
     version="1.0.0",
-    framework="BeeAI + Watsonx + A2A",
+    framework="BeeAI + A2A (Granite/Ollama or Watsonx)",
     author={"name": "Edgar Bruney"},
     tools=[
         AgentDetailTool(
@@ -379,12 +383,166 @@ DEVELOPER_AGENT_SKILLS = [
 # Crear servidor AgentStack
 server = Server()
 
-def create_developer_agent():
-    """Creates an instance of the Quantum Developer Agent with Mistral Large"""
-    # Configure Watsonx with Mistral Large
-    llm = ChatModel.from_name(
-        f"watsonx:{os.getenv('WATSONX_DEVELOPER_MODEL', 'mistralai/mistral-large-2')}"
+_SUPERPOSITION_PATTERN = re.compile(r"\b(superposition|superposici[oó]n)\b", re.IGNORECASE)
+_QUBIT_COUNT_PATTERN = re.compile(r"\b(\d+)\s*[- ]?\s*(?:qubits?|c[uú]bits?)\b", re.IGNORECASE)
+_CODE_REQUEST_PATTERN = re.compile(
+    r"\b(create|generate|build|implement|circuit|qasm|crea\w*|genera\w*|"
+    r"constru\w*|implementa\w*|circuito)\b",
+    re.IGNORECASE,
+)
+_BELL_PATTERN = re.compile(r"\b(bell(?:\s+state)?|estado\s+de\s+bell)\b", re.IGNORECASE)
+_CX_PATTERN = re.compile(r"\b(cx|cnot|controlled[- ]?not|compuerta\s+cx)\b", re.IGNORECASE)
+_GROVER_PATTERN = re.compile(r"\bgrover(?:'s)?\b", re.IGNORECASE)
+_DEUTSCH_JOZSA_PATTERN = re.compile(r"\bdeutsch[- ]?jozsa\b", re.IGNORECASE)
+_CONCEPT_REQUEST_PATTERN = re.compile(
+    r"\b(explain\w*|describe\w*|what (?:is|are)|explica\w*|qu[eé] (?:es|son))\b",
+    re.IGNORECASE,
+)
+_ENTANGLEMENT_PATTERN = re.compile(r"\b(entanglement|entrelazamiento)\b", re.IGNORECASE)
+
+
+def _superposition_qasm(request: str) -> str | None:
+    """Build a simple measured superposition circuit without an LLM round trip."""
+    if not _SUPERPOSITION_PATTERN.search(request):
+        return None
+    match = _QUBIT_COUNT_PATTERN.search(request)
+    qubit_count = int(match.group(1)) if match else 1
+    if not 1 <= qubit_count <= 64:
+        return None
+    gates = "\n".join(f"h q[{index}];" for index in range(qubit_count))
+    return (
+        "```qasm\n"
+        "OPENQASM 2.0;\n"
+        'include "qelib1.inc";\n'
+        f"qreg q[{qubit_count}];\n"
+        f"creg c[{qubit_count}];\n\n"
+        f"{gates}\n"
+        "measure q -> c;\n"
+        "```"
     )
+
+
+def _basic_algorithm_qasm(request: str) -> tuple[str, str] | None:
+    """Return reliable measured QASM for common introductory circuits."""
+    if not _CODE_REQUEST_PATTERN.search(request):
+        return None
+
+    if _BELL_PATTERN.search(request):
+        return "Bell state", """```qasm
+OPENQASM 2.0;
+include "qelib1.inc";
+qreg q[2];
+creg c[2];
+
+h q[0];
+cx q[0],q[1];
+measure q -> c;
+```"""
+
+    if _GROVER_PATTERN.search(request):
+        match = _QUBIT_COUNT_PATTERN.search(request)
+        qubit_count = int(match.group(1)) if match else 2
+        if qubit_count not in (2, 3):
+            return None
+        phase_flip = (
+            "cz q[0],q[1];"
+            if qubit_count == 2
+            else "h q[2];\nccx q[0],q[1],q[2];\nh q[2];"
+        )
+        return "Grover search", (
+            "```qasm\n"
+            "OPENQASM 2.0;\n"
+            'include "qelib1.inc";\n'
+            f"qreg q[{qubit_count}];\n"
+            f"creg c[{qubit_count}];\n\n"
+            "h q;\n\n"
+            f"// Oracle: mark |{'1' * qubit_count}>\n{phase_flip}\n\n"
+            "// Grover diffuser\nh q;\n"
+            "x q;\n"
+            f"{phase_flip}\n"
+            "x q;\n"
+            "h q;\n"
+            "measure q -> c;\n"
+            "```"
+        )
+
+    if _DEUTSCH_JOZSA_PATTERN.search(request):
+        return "Deutsch-Jozsa", """```qasm
+OPENQASM 2.0;
+include "qelib1.inc";
+qreg q[3];
+creg c[2];
+
+// Two input qubits and one ancilla; balanced parity oracle.
+x q[2];
+h q[0];
+h q[1];
+h q[2];
+cx q[0],q[2];
+cx q[1],q[2];
+h q[0];
+h q[1];
+measure q[0] -> c[0];
+measure q[1] -> c[1];
+```"""
+
+    if _CX_PATTERN.search(request):
+        return "CX gate", """```qasm
+OPENQASM 2.0;
+include "qelib1.inc";
+qreg q[2];
+creg c[2];
+
+// Prepare |10> in little-endian qubit order, then copy the control with CX.
+x q[0];
+cx q[0],q[1];
+measure q -> c;
+```"""
+
+    return None
+
+
+async def _run_concept_model(prompt: str) -> str:
+    """Generate a concise concept explanation without exposing model reasoning."""
+    configured_model = model_name("DEVELOPER")
+    if configured_model.startswith("ollama:"):
+        ollama_model = configured_model.split(":", 1)[1]
+        ollama_url = os.getenv("OLLAMA_API_BASE", "http://127.0.0.1:11434").rstrip("/")
+        payload = json.dumps(
+            {
+                "model": ollama_model,
+                "messages": [{"role": "user", "content": prompt}],
+                "stream": False,
+                "think": False,
+                "options": {"num_predict": 220, "temperature": 0.1},
+            }
+        ).encode("utf-8")
+
+        def send_request() -> str:
+            req = urllib_request.Request(
+                f"{ollama_url}/api/chat",
+                data=payload,
+                headers={"Content-Type": "application/json"},
+            )
+            with urllib_request.urlopen(req, timeout=180) as response:
+                data = json.loads(response.read().decode("utf-8"))
+            return str(data.get("message", {}).get("content", "")).strip()
+
+        response = await asyncio.to_thread(send_request)
+        if not response:
+            raise ValueError("Ollama returned an empty concept explanation.")
+        return response
+
+    model_output = await create_chat_model("DEVELOPER").run(
+        [UserMessage(prompt)],
+        max_tokens=220,
+        temperature=0.1,
+    )
+    return model_output.get_text_content()
+
+def create_developer_agent():
+    """Create the Quantum Developer Agent with its configured chat model."""
+    llm = create_chat_model("DEVELOPER")
     
     # Use ReActAgent without tools (only for reasoning and code generation)
     return ReActAgent(
@@ -419,6 +577,25 @@ async def quantum_developer_agent(
         title="🔍 Analyzing code request",
         content=f"Processing user query:\n```\n{user_query[:200]}{'...' if len(user_query) > 200 else ''}\n```"
     )
+
+    basic_algorithm = _basic_algorithm_qasm(user_query)
+    if basic_algorithm:
+        algorithm_name, algorithm_qasm = basic_algorithm
+        yield trajectory.trajectory_metadata(
+            title=f"✅ {algorithm_name} circuit generated",
+            content="Generated and measured a valid OpenQASM 2.0 circuit deterministically.",
+        )
+        yield AgentMessage(text=algorithm_qasm)
+        return
+
+    superposition_qasm = _superposition_qasm(user_query)
+    if superposition_qasm:
+        yield trajectory.trajectory_metadata(
+            title="✅ Superposition circuit generated",
+            content="Generated and measured a valid OpenQASM 2.0 circuit deterministically.",
+        )
+        yield AgentMessage(text=superposition_qasm)
+        return
     
     # Create the agent with the instructions
     agent = create_developer_agent()
@@ -426,11 +603,29 @@ async def quantum_developer_agent(
     # Step 2: Agent preparation
     yield trajectory.trajectory_metadata(
         title="🤖 Preparing development agent",
-        content=f"**Configuration:**\n- Model: Mistral Large 2\n- Specialty: Quantum code generation\n- Memory: Unconstrained"
+        content=f"**Configuration:**\n- Model: {model_name('DEVELOPER')}\n- Specialty: Quantum code generation\n- Memory: Unconstrained"
     )
     
     # Build the prompt with system instructions
-    full_prompt = f"{DEVELOPER_INSTRUCTIONS}\n\n---\n\nUSER REQUEST:\n{user_query}"
+    if _ENTANGLEMENT_PATTERN.search(user_query):
+        full_prompt = (
+            "You are a quantum computing educator. Explain quantum entanglement accurately and concisely. "
+            "Use this exact canonical example: the Bell state |Phi+> = (|00> + |11>)/sqrt(2), "
+            "created by applying H to qubit 0 and then CNOT with control 0 and target 1. "
+            "Explain correlated measurements and explicitly state that entanglement cannot transmit "
+            "information faster than light. Do not rename the Bell state or introduce a cryptography "
+            "protocol unless the user asks for one. Answer in no more than 120 words.\n\n"
+            f"USER REQUEST:\n{user_query}"
+        )
+    elif _CONCEPT_REQUEST_PATTERN.search(user_query):
+        full_prompt = (
+            "You are a quantum computing educator. Answer the request accurately and concisely. "
+            "Define the concept, explain its mechanism, and give one useful quantum example. "
+            "Do not generate code unless the user asks for it. Answer in no more than 120 words.\n\n"
+            f"USER REQUEST:\n{user_query}"
+        )
+    else:
+        full_prompt = f"{DEVELOPER_INSTRUCTIONS}\n\n---\n\nUSER REQUEST:\n{user_query}"
     
     # Step 3: Code generation
     yield trajectory.trajectory_metadata(
@@ -438,9 +633,14 @@ async def quantum_developer_agent(
         content="Agent is analyzing the request and generating QASM/Qiskit code..."
     )
     
+    concept_request = bool(_CONCEPT_REQUEST_PATTERN.search(user_query))
+
     # Execute the agent
     try:
-        run_context = await agent.run(full_prompt)
+        if concept_request:
+            response = await _run_concept_model(full_prompt)
+        else:
+            run_context = await run_agent_with_retries(agent, full_prompt)
         
         # Update trajectory with progress
         yield trajectory.trajectory_metadata(
@@ -448,22 +648,23 @@ async def quantum_developer_agent(
             content="- [x] Analysis completed\n- [x] Code generated\n- [x] Explanation prepared"
         )
         
-        # Extraer la respuesta
-        response = ""
-        if hasattr(run_context, 'output') and run_context.output:
-            output = run_context.output
-            if isinstance(output, list) and output:
-                last_msg = output[-1]
-                if hasattr(last_msg, 'text'):
-                    response = str(last_msg.text)
-                elif hasattr(last_msg, 'content'):
-                    response = str(last_msg.content)
+        # Extraer la respuesta del flujo ReAct para solicitudes de código.
+        if not concept_request:
+            response = ""
+            if hasattr(run_context, 'output') and run_context.output:
+                output = run_context.output
+                if isinstance(output, list) and output:
+                    last_msg = output[-1]
+                    if hasattr(last_msg, 'text'):
+                        response = str(last_msg.text)
+                    elif hasattr(last_msg, 'content'):
+                        response = str(last_msg.content)
+                    else:
+                        response = str(last_msg)
                 else:
-                    response = str(last_msg)
+                    response = str(output)
             else:
-                response = str(output)
-        else:
-            response = str(run_context)
+                response = str(run_context)
         
         # Asegurar que response sea string
         if not isinstance(response, str):
@@ -487,16 +688,16 @@ async def quantum_developer_agent(
         
     except Exception as e:
         import traceback
-        error_msg = f"❌ Error in Developer Agent: {str(e)}"
+        error_msg = f"❌ Error in Developer Agent: {explain_error(e)}"
         error_details = f"\n\nError type: {type(e).__name__}\n"
-        error_details += f"Details: {str(e)}\n\n"
+        error_details += f"Details: {explain_error(e)}\n\n"
         error_details += "Traceback:\n"
         error_details += traceback.format_exc()
         
         # Error trajectory
         yield trajectory.trajectory_metadata(
             title="❌ Error detected",
-            content=f"**Type:** {type(e).__name__}\n**Message:** {str(e)}\n\nCheck logs for more details."
+            content=f"**Type:** {type(e).__name__}\n**Message:** {explain_error(e)}\n\nCheck logs for more details."
         )
         
         print("=" * 80)
@@ -515,7 +716,7 @@ def run():
     print("🚀 Starting Quantum Developer Agent Server")
     print("=" * 80)
     print(f"  👨‍💻 Agent: Quantum Developer Agent")
-    print(f"  🤖 Model: {os.getenv('WATSONX_DEVELOPER_MODEL', 'mistralai/mistral-large-2')}")
+    print(f"  🤖 Model: {model_name('DEVELOPER')}")
     print(f"  🌐 Host: {host}")
     print(f"  🔌 Port: {port}")
     print(f"  🛠️  Tools: 0 (Pure LLM - Code Generation)")

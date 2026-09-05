@@ -16,16 +16,16 @@ The Quantum Developer Agent is a specialized AI agent that generates quantum cod
 
 ## 🏗️ Architecture
 
-- **Model**: Mistral Large 2 (Watsonx)
+- **Model**: Granite 4.2 8B via Ollama (`ollama:granite4.2:8b`)
 - **Port**: 8001
 - **Type**: AgentStack Server with A2A protocol
 - **Tools**: None (Pure LLM for code generation)
-- **Framework**: BeeAI + Watsonx + A2A
+- **Framework**: BeeAI + Granite/Ollama + A2A
 
 ## 📋 Prerequisites
 
 - Python 3.11+
-- IBM Watsonx account with API key
+- Ollama with `granite4.2:8b` (Watsonx remains an optional fallback)
 
 ## 📦 Project Dependencies
 
@@ -80,7 +80,7 @@ This agent is the **quantum code generation specialist** of the multi-agent syst
 - ❌ Does not retrieve job results (use Status Agent)
 
 **Communication:**
-- Receives requests via A2A from Quantum Lab Agent (port 8000)
+- Receives requests via A2A from Operations Agent (port 8000)
 - Responds with QASM/Qiskit code and explanations
 - Can be invoked directly on port 8001
 
@@ -116,7 +116,8 @@ WATSONX_PROJECT_ID=your_project_id_here
 WATSONX_API_URL=https://us-south.ml.cloud.ibm.com/ml/v1/text/chat?version=2023-05-29
 
 # Developer Agent Configuration
-WATSONX_DEVELOPER_MODEL=mistralai/mistral-large-2
+OLLAMA_API_BASE=http://127.0.0.1:11434
+DEVELOPER_MODEL=ollama:granite4.2:8b
 DEVELOPER_HOST=127.0.0.1
 DEVELOPER_PORT=8001
 ```
@@ -145,20 +146,13 @@ curl http://localhost:8001/.well-known/agent-card.json
 ### Example 1: Generate a Bell State Circuit
 
 ```bash
-curl -X POST http://localhost:8001/jsonrpc/ \
+curl -X POST http://localhost:8001 \
   -H "Content-Type: application/json" \
   -d '{
-    "jsonrpc": "2.0",
-    "id": "1",
-    "method": "message/send",
-    "params": {
-      "message": {
-        "kind": "message",
-        "messageId": "4737a402-f622-4db5-a1f4-96b75743a5f9",
-        "role": "user",
-        "parts": [{"kind": "text", "text": "Create a Bell state circuit in QASM"}]
-      }
-    }
+    "messages": [{
+      "role": "user",
+      "content": "Create a Bell state circuit in QASM"
+    }]
   }'
 ```
 
@@ -171,20 +165,13 @@ curl -X POST http://localhost:8001/jsonrpc/ \
 ### Example 2: Implement Grover's Algorithm
 
 ```bash
-curl -X POST http://localhost:8001/jsonrpc/ \
+curl -X POST http://localhost:8001 \
   -H "Content-Type: application/json" \
   -d '{
-    "jsonrpc": "2.0",
-    "id": "1",
-    "method": "message/send",
-    "params": {
-      "message": {
-        "kind": "message",
-        "messageId": "740be220-1be6-4f10-9efb-bd61d8276010",
-        "role": "user",
-        "parts": [{"kind": "text", "text": "Implement Grover'\''s algorithm for 3 qubits"}]
-      }
-    }
+    "messages": [{
+      "role": "user",
+      "content": "Implement Grover'\''s algorithm for 3 qubits"
+    }]
   }'
 ```
 
@@ -197,20 +184,13 @@ curl -X POST http://localhost:8001/jsonrpc/ \
 ### Example 3: Explain Quantum Concepts
 
 ```bash
-curl -X POST http://localhost:8001/jsonrpc/ \
+curl -X POST http://localhost:8001 \
   -H "Content-Type: application/json" \
   -d '{
-    "jsonrpc": "2.0",
-    "id": "1",
-    "method": "message/send",
-    "params": {
-      "message": {
-        "kind": "message",
-        "messageId": "ff329340-c608-4189-aeb1-e817f2c6dfe8",
-        "role": "user",
-        "parts": [{"kind": "text", "text": "Explain what quantum entanglement is"}]
-      }
-    }
+    "messages": [{
+      "role": "user",
+      "content": "Explain what quantum entanglement is"
+    }]
   }'
 ```
 
@@ -318,29 +298,19 @@ This agent is designed to work as part of the Quantum Lab Agent System:
 While designed for A2A communication, the agent can also be used standalone:
 
 ```python
-import uuid
 import requests
 
 response = requests.post(
-    "http://localhost:8001/jsonrpc/",
+    "http://localhost:8001",
     json={
-        "jsonrpc": "2.0",
-        "id": "1",
-        "method": "message/send",
-        "params": {
-            "message": {
-                "kind": "message",
-                "messageId": str(uuid.uuid4()),
-                "role": "user",
-                "parts": [{"kind": "text", "text": "Create a superposition circuit"}]
-            }
-        }
+        "messages": [{
+            "role": "user",
+            "content": "Create a superposition circuit"
+        }]
     }
 )
 
-result = response.json()["result"]
-final_message = result["history"][-1]
-print(final_message["parts"][0]["text"])
+print(response.json())
 ```
 
 ## 🐛 Troubleshooting
@@ -371,7 +341,7 @@ uv sync --reinstall
 - Check your API key in `.env`
 - Verify project ID is correct
 - Check Watsonx service status
-- Ensure you have access to Mistral Large model
+- For local inference, run `ollama pull granite4.2:8b`
 
 ### Code Generation Issues
 
@@ -385,10 +355,10 @@ uv sync --reinstall
 
 This agent is part of the Quantum Computing Multi-Agent System. Here are the related repositories:
 
-- **[Quantum Computing Agent](https://github.ibm.com/Edgar-Castaneda/quantum-computing-agent)** - Circuit execution specialist
-- **[Quantum Status Agent](https://github.ibm.com/Edgar-Castaneda/quantum-status-agent)** - Status monitoring and job tracking
-- **[Quantum Developer Agent](https://github.ibm.com/Edgar-Castaneda/quantum-developer-agent)** - Code generation and algorithm implementation (this repository)
-- **[Quantum Lab Agent](https://github.ibm.com/Edgar-Castaneda/quantum-lab-agent)** - Main orchestrator coordinating all agents
+- **[Quantum Computing Agent](https://github.com/BrUn3y/quantum-computing-agent)** - Circuit execution specialist
+- **[Quantum Status Agent](https://github.com/BrUn3y/quantum-status-agent)** - Status monitoring and job tracking
+- **[Quantum Developer Agent](https://github.com/BrUn3y/quantum-developer-agent)** - Code generation and algorithm implementation (this repository)
+- **[Quantum Operations Agent](https://github.com/BrUn3y/quantum-lab-agent)** - Main orchestrator coordinating all agents
 
 ## 📚 Additional Resources
 
@@ -409,6 +379,6 @@ Apache 2.0 License
 
 - Built with [BeeAI Framework](https://github.com/i-am-bee/beeai-framework)
 - Powered by [IBM Watsonx](https://www.ibm.com/products/watsonx-ai)
-- LLM: Mistral Large 2
+- LLM: Granite 4.2 8B via Ollama
 
 ---
