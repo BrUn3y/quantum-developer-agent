@@ -97,7 +97,6 @@ Thumbs.db
 *.tmp
 *.temp
 skills-lock.json
-uv.lock
 
 # Backup files
 *.backup
