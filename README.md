@@ -16,7 +16,7 @@ The Quantum Developer Agent is a specialized AI agent that generates quantum cod
 
 ## 🏗️ Architecture
 
-- **Model**: Granite 4 Small H via Ollama (`ollama:granite4:small-h`)
+- **Model**: Granite 4.2 8B via Ollama (`ollama:granite4.2:8b`)
 - **Port**: 8001
 - **Type**: AgentStack Server with A2A protocol
 - **Tools**: None (Pure LLM for code generation)
@@ -25,7 +25,7 @@ The Quantum Developer Agent is a specialized AI agent that generates quantum cod
 ## 📋 Prerequisites
 
 - Python 3.11+
-- Ollama with `granite4:small-h` (Watsonx remains an optional fallback)
+- Ollama with `granite4.2:8b` (Watsonx remains an optional fallback)
 
 ## 📦 Project Dependencies
 
@@ -117,7 +117,7 @@ WATSONX_API_URL=https://us-south.ml.cloud.ibm.com/ml/v1/text/chat?version=2023-0
 
 # Developer Agent Configuration
 OLLAMA_API_BASE=http://127.0.0.1:11434
-DEVELOPER_MODEL=ollama:granite4:small-h
+DEVELOPER_MODEL=ollama:granite4.2:8b
 DEVELOPER_HOST=127.0.0.1
 DEVELOPER_PORT=8001
 ```
@@ -341,7 +341,7 @@ uv sync --reinstall
 - Check your API key in `.env`
 - Verify project ID is correct
 - Check Watsonx service status
-- For local inference, run `ollama pull granite4:small-h`
+- For local inference, run `ollama pull granite4.2:8b`
 
 ### Code Generation Issues
 
@@ -379,6 +379,6 @@ Apache 2.0 License
 
 - Built with [BeeAI Framework](https://github.com/i-am-bee/beeai-framework)
 - Powered by [IBM Watsonx](https://www.ibm.com/products/watsonx-ai)
-- LLM: Granite 4 Small H via Ollama
+- LLM: Granite 4.2 8B via Ollama
 
 ---
