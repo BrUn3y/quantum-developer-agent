@@ -16,16 +16,16 @@ The Quantum Developer Agent is a specialized AI agent that generates quantum cod
 
 ## 🏗️ Architecture
 
-- **Model**: Mistral Large 2 (Watsonx)
+- **Model**: Granite 4 Small H via Ollama (`ollama:granite4:small-h`)
 - **Port**: 8001
 - **Type**: AgentStack Server with A2A protocol
 - **Tools**: None (Pure LLM for code generation)
-- **Framework**: BeeAI + Watsonx + A2A
+- **Framework**: BeeAI + Granite/Ollama + A2A
 
 ## 📋 Prerequisites
 
 - Python 3.11+
-- IBM Watsonx account with API key
+- Ollama with `granite4:small-h` (Watsonx remains an optional fallback)
 
 ## 📦 Project Dependencies
 
@@ -116,7 +116,8 @@ WATSONX_PROJECT_ID=your_project_id_here
 WATSONX_API_URL=https://us-south.ml.cloud.ibm.com/ml/v1/text/chat?version=2023-05-29
 
 # Developer Agent Configuration
-WATSONX_DEVELOPER_MODEL=mistralai/mistral-large-2
+OLLAMA_API_BASE=http://127.0.0.1:11434
+DEVELOPER_MODEL=ollama:granite4:small-h
 DEVELOPER_HOST=127.0.0.1
 DEVELOPER_PORT=8001
 ```
@@ -340,7 +341,7 @@ uv sync --reinstall
 - Check your API key in `.env`
 - Verify project ID is correct
 - Check Watsonx service status
-- Ensure you have access to Mistral Large model
+- For local inference, run `ollama pull granite4:small-h`
 
 ### Code Generation Issues
 
@@ -378,6 +379,6 @@ Apache 2.0 License
 
 - Built with [BeeAI Framework](https://github.com/i-am-bee/beeai-framework)
 - Powered by [IBM Watsonx](https://www.ibm.com/products/watsonx-ai)
-- LLM: Mistral Large 2
+- LLM: Granite 4 Small H via Ollama
 
 ---
